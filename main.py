@@ -23,16 +23,30 @@ import pygame
 
 _assets_prepared = False
 
-def _sync_game_sprites_to_images():
+def _ensure_images_point_to_game_sprites():
     """
-    Fonte de verdade: `game/sprites/`.
-    O PGZero carrega imagens via pasta `images/`, então copiamos os PNGs para lá.
+    Pedido: sprites ficam em `game/sprites/`.
+
+    O PGZero sempre carrega imagens pela pasta `images/` (relativa ao root).
+    Então garantimos que exista `game/images/` apontando para `game/sprites/`:
+    - tenta criar um symlink (se permitido no Windows)
+    - senão, faz cópia dos PNGs (fallback)
     """
     sprites_dir = _ROOT / "game" / "sprites"
-    images_dir = _ROOT / "game" / "sprites"
+    images_dir = _ROOT / "game" / "images"
+
     if not sprites_dir.exists():
         return
 
+    # 1) tenta symlink (pode exigir permissão no Windows)
+    try:
+        if not images_dir.exists():
+            os.symlink(str(sprites_dir), str(images_dir), target_is_directory=True)
+            return
+    except Exception:
+        pass
+
+    # 2) fallback: copia os PNGs para game/images
     try:
         images_dir.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -59,10 +73,14 @@ def _prepare_assets_once():
         return
     _assets_prepared = True
 
+    # Garante o caminho de imagens em `game/sprites` (via game/images link/cópia).
+    _ensure_images_point_to_game_sprites()
+
     try:
         import pgzero.loaders as _runtime_loaders
-        # set_root aceita arquivo ou pasta; preferimos o arquivo real do jogo.
-        _runtime_loaders.set_root(str(_THIS_FILE))
+        # set_root aceita arquivo ou pasta.
+        # Para usar assets em D:\...\game\*, setamos root para a pasta `game`.
+        _runtime_loaders.set_root(str((_ROOT / "game").resolve()))
         # força revalidação do root
         try:
             _runtime_loaders.images.have_root = False
@@ -75,9 +93,6 @@ def _prepare_assets_once():
     except Exception:
         pass
 
-    # Sempre sincroniza sprites (game/sprites -> images) antes de qualquer carregamento.
-    _sync_game_sprites_to_images()
-
     # Fallback: se por algum motivo o PGZero estiver usando outro root (ex.: a pasta
     # de onde o usuário executou), garante que exista um `images/` lá também.
     try:
@@ -85,7 +100,7 @@ def _prepare_assets_once():
         runtime_root = Path(_runtime_loaders2.root).resolve()
         dst_images = runtime_root / "images"
         if not dst_images.exists():
-            src_images = _ROOT / "images"
+            src_images = _ROOT / "game" / "images"
             if src_images.exists():
                 dst_images.mkdir(parents=True, exist_ok=True)
                 for p in src_images.glob("*.png"):
@@ -107,10 +122,9 @@ def _prepare_assets_once():
     if bad_images:
         try:
             # Import seguro (sync_assets não executa mais no import)
-            from sync_assets import ensure_sprites_valid, sync_folder, GAME_SPRITES, IMAGES_DIR
+            from sync_assets import ensure_sprites_valid
 
             ensure_sprites_valid()
-            sync_folder(GAME_SPRITES, IMAGES_DIR)
         except Exception:
             # Se não der (ambiente sem pillow, permissões etc.), deixa seguir.
             pass
@@ -669,7 +683,7 @@ def init_game():
         # Troféu: meio da tela, canto direito
         trophy = None
         try:
-            trophy_path = _ROOT / "images" / "trophy.png"
+            trophy_path = _ROOT / "game" / "sprites" / "trophy.png"
             if trophy_path.exists():
                 trophy = actor("trophy", (0, 0))
                 tw = int(getattr(trophy, "width", 64))
