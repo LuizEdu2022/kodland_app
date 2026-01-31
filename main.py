@@ -413,9 +413,11 @@ class Hero:
         self.move_speed = 5
         self.jump_velocity = -12
 
-        self.idle_frames = ["hero_idle1", "hero_idle2"]
-        # Parado (sem mexer em nenhuma tecla): fica estático nesse sprite
-        self.idle_still_image = "hero_idle3"
+        # Animações
+        # - parado (sem tecla): anima (inclui idle3)
+        # - esquerda: anima com idle1/idle2 (pedido anterior)
+        self.stand_frames = ["hero_idle3", "hero_idle1", "hero_idle2"]
+        self.left_frames = ["hero_idle1", "hero_idle2"]
         self.run_frames = ["hero_run1", "hero_run2"]
         # Sprite usado enquanto estiver no ar (pulo/queda)
         self.jump_image = "hero_jump"
@@ -430,8 +432,8 @@ class Hero:
             Actor_class = getattr(__main__, 'Actor', None)
         if Actor_class is None:
             raise RuntimeError("Actor não está disponível. Certifique-se de que pgzrun.go() foi chamado.")
-        # Começa parado
-        self.actor = Actor_class(self.idle_still_image, (self.x, self.y))
+        # Começa parado (primeiro frame do idle)
+        self.actor = Actor_class(self.stand_frames[0], (self.x, self.y))
 
         # Hitbox fixa: evita que trocar de sprite (com tamanho diferente)
         # quebre colisões e o "on_ground".
@@ -546,14 +548,12 @@ class Hero:
             # - esquerda: usa hero_idle1/hero_idle2
             # - direita: usa hero_run1/hero_run2
             if moving_left and not moving_right:
-                self.update_animation(self.idle_frames)
+                self.update_animation(self.left_frames)
             elif moving_right and not moving_left:
                 self.update_animation(self.run_frames)
             else:
-                # Sem movimento: fica estático
-                self.actor.image = self.idle_still_image
-                self.frame_timer = 0
-                self.current_frame = 0
+                # Sem movimento: anima idle também
+                self.update_animation(self.stand_frames)
 
 # --- Enemy Class ---
 class Enemy:
@@ -576,22 +576,39 @@ class Enemy:
             raise RuntimeError("Actor não está disponível. Certifique-se de que pgzrun.go() foi chamado.")
         self.actor = Actor_class(self.idle_frames[0], (self.x, self.y))
         self.direction = random.choice([-1, 1])
+        self.speed = 2
+        self.pause_frames = 0
 
-    def update(self):
-        self.x += self.direction * 2
-
-        # change direction randomly
-        if random.random() < 0.01:
-            self.direction *= -1
-
-        self.actor.pos = (self.x, self.y)
-
-        # animation
+    def update_animation(self, frames):
         self.frame_timer += 1
         if self.frame_timer > 12:
             self.frame_timer = 0
-            self.current_frame = (self.current_frame + 1) % 2
-            self.actor.image = self.move_frames[self.current_frame]
+            self.current_frame = (self.current_frame + 1) % max(1, len(frames))
+            self.actor.image = frames[self.current_frame]
+
+    def update(self):
+        moving = True
+
+        # Às vezes o inimigo "para" e fica em idle (com animação)
+        if self.pause_frames > 0:
+            self.pause_frames -= 1
+            moving = False
+        else:
+            self.x += self.direction * self.speed
+
+            # change direction randomly
+            if random.random() < 0.01:
+                self.direction *= -1
+
+            # chance de parar por um tempo
+            if random.random() < 0.005:
+                self.pause_frames = random.randint(30, 90)
+
+        self.actor.pos = (self.x, self.y)
+
+        # animation (move e idle)
+        frames = self.move_frames if moving else self.idle_frames
+        self.update_animation(frames)
 
 # --- Game Instances (initialized after pgzrun) ---
 hero = None
