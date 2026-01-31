@@ -21,7 +21,7 @@ GAME_SPRITES = BASE_DIR / "game" / "sprites"
 GAME_SOUNDS = BASE_DIR / "game" / "sounds"
 GAME_MUSIC = BASE_DIR / "game" / "music"
 
-IMAGES_DIR = BASE_DIR / "images"
+IMAGES_DIR = BASE_DIR / "game" / "images"
 SOUNDS_DIR = BASE_DIR / "sounds"
 MUSIC_DIR = BASE_DIR / "music"
 
